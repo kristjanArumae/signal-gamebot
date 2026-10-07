@@ -1,0 +1,31 @@
+# Cap each container's logs (3 x 10 MB) so a message flood can't fill the disk.
+x-logging: &logging
+  driver: json-file
+  options: {max-size: 10m, max-file: "3"}
+
+services:
+  signal-api:
+    # Pinned (v0.101): this container holds the bot's Signal keys, so update deliberately.
+    image: bbernhard/signal-cli-rest-api@sha256:2cf09d66a86fdd210e42ee91662216364acc27da1163a8c44167a77ea3a6559a
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      MODE: json-rpc
+    volumes:
+      - /opt/gamebot/data/signal:/home/.local/share/signal-cli
+    ports:
+      # Localhost only: used by scripts/admin.sh for registration. No inbound access from the internet.
+      - "127.0.0.1:8080:8080"
+
+  bot:
+    image: gamebot:latest  # built by scripts/deploy.sh on the instance
+    restart: unless-stopped
+    logging: *logging
+    depends_on:
+      signal-api: {condition: service_healthy}  # avoid connection errors while it boots
+    env_file: [.env, secrets.env]  # secrets.env is written on the instance by deploy.sh
+    environment:
+      SIGNAL_API_URL: http://signal-api:8080
+      DB_PATH: /data/gamebot.db
+    volumes:
+      - /opt/gamebot/data/bot:/data
