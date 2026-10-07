@@ -519,3 +519,9 @@ def test_reparse_merges_ai_read_rows(capsys):
     assert sorted((e.player_name, e.score, e.display) for e in entries) == [
         ("Alice", 4382, "43.82/50"), ("Bob", 4248, "42.48/50")]
     assert store.entries("g", "color", "2") == []
+
+
+def test_help_links_the_repo(setup):
+    bot, messenger, _, run = setup
+    run(bot.handle_envelope(envelope("Alice", "!help")))
+    assert messenger.sent[-1].endswith("🛠️ Source & setup: https://github.com/kristjanArumae/signal-gamebot")

@@ -53,7 +53,9 @@ Mix them: !lb maptap month
 !usage — how much AI the bot has used
 
 ❓ = I don't know that command. 🤷 = no scores for that.
-Week/month/all-time rank by daily wins, then average score."""
+Week/month/all-time rank by daily wins, then average score.
+
+🛠️ Source & setup: https://github.com/kristjanArumae/signal-gamebot"""
 
 FALLBACK_JOKES = [
     "I was going to tell a Wordle joke, but I only had five letters and none of them were green.",
