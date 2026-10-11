@@ -527,3 +527,26 @@ def test_help_links_the_repo(setup):
     bot, messenger, _, run = setup
     run(bot.handle_envelope(envelope("Alice", "!help")))
     assert messenger.sent[-1].endswith("🛠️ Source & setup: https://github.com/kristjanArumae/signal-gamebot")
+
+
+def test_stores_signal_sent_time(setup):
+    bot, _, _, run = setup
+    sent = datetime(2026, 10, 5, 7, 30, tzinfo=ET)  # sent before the bot received it (clock: 9:00)
+    run(bot.handle_envelope(envelope("Alice", maptap(5, 945), ts=int(sent.timestamp() * 1000))))
+    (sent_at,) = bot.store.db.execute("SELECT sent_at FROM submissions").fetchone()
+    assert datetime.fromisoformat(sent_at) == sent
+
+
+def test_adds_sent_at_to_old_databases(tmp_path):
+    import sqlite3
+    path = str(tmp_path / "old.db")
+    old = sqlite3.connect(path)
+    old.execute("CREATE TABLE submissions (group_id TEXT NOT NULL, game TEXT NOT NULL, puzzle TEXT NOT NULL, "
+                "puzzle_label TEXT NOT NULL, player_id TEXT NOT NULL, player_name TEXT NOT NULL, "
+                "score INTEGER NOT NULL, display TEXT NOT NULL, raw TEXT NOT NULL, received_at TEXT NOT NULL, "
+                "PRIMARY KEY (group_id, game, puzzle, player_id))")
+    old.execute("INSERT INTO submissions VALUES ('g','maptap','1','Oct 1','p','P',1,'1','x','2026-10-01T12:00:00')")
+    old.commit()
+    old.close()
+    store = Store(path)
+    assert store.db.execute("SELECT sent_at FROM submissions").fetchone() == (None,)

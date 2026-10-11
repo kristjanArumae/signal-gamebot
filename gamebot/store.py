@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS submissions (
     display      TEXT NOT NULL,
     raw          TEXT NOT NULL,
     received_at  TEXT NOT NULL,
+    sent_at      TEXT,  -- when the sender's phone sent it (Signal's timestamp); NULL for old rows
     PRIMARY KEY (group_id, game, puzzle, player_id)
 );
 CREATE INDEX IF NOT EXISTS submissions_recent ON submissions (group_id, game, received_at);
@@ -81,6 +82,9 @@ class Store:
         if "url" not in {row[1] for row in self.db.execute("PRAGMA table_info(games)")}:
             self.db.execute("ALTER TABLE games ADD COLUMN url TEXT NOT NULL DEFAULT ''")
             self.db.commit()
+        if "sent_at" not in {row[1] for row in self.db.execute("PRAGMA table_info(submissions)")}:
+            self.db.execute("ALTER TABLE submissions ADD COLUMN sent_at TEXT")
+            self.db.commit()
         columns = {row[1] for row in self.db.execute("PRAGMA table_info(groups)")}
         if "allowed" not in columns:
             # Allowlist introduced: grandfather in every group the bot was already in.
@@ -89,12 +93,13 @@ class Store:
             self.db.commit()
 
     def add(self, group_id: str, result: Result, player_id: str, player_name: str,
-            raw: str, now: datetime) -> bool:
+            raw: str, now: datetime, sent_at: datetime | None = None) -> bool:
         """Record a submission. The first one per player per puzzle counts; returns False for repeats."""
         cur = self.db.execute(
-            "INSERT OR IGNORE INTO submissions VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR IGNORE INTO submissions VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (group_id, result.game, result.puzzle, result.puzzle_label, player_id,
-             player_name, result.score, result.display, raw, now.isoformat()),
+             player_name, result.score, result.display, raw, now.isoformat(),
+             sent_at.isoformat() if sent_at else None),
         )
         # Keep the display name current even when the score is a repeat.
         self.db.execute(

@@ -132,7 +132,8 @@ class GameBot:
         if not result:
             return  # conversation, or not a result we can read: stay silent
         name = envelope.get("sourceName") or envelope.get("sourceNumber") or "Someone"
-        added = self.store.add(group_id, result, author, name, text, now)
+        sent_at = datetime.fromtimestamp(timestamp / 1000, timezone.utc)
+        added = self.store.add(group_id, result, author, name, text, now, sent_at)
         log.info("%s %s %s: %s (%s)", name, result.game, result.puzzle, result.display,
                  "tracked" if added else "repeat")
         await react(tracked if added else REPEAT)
