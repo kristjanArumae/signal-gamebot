@@ -119,16 +119,25 @@ def puzzle_days(puzzles: list[tuple[str, str, str, datetime]], tz: tzinfo) -> di
     return days
 
 
+# Multi-day boards rank by an adjusted average: each player's scores plus PRIOR_DAYS imaginary days
+# at the group's average. Few plays stay near the middle (one lucky day can't top the board);
+# with many plays it's essentially the player's real average.
+PRIOR_DAYS = 3
+ADJUSTED_NOTE = ("📊 Ranked by adjusted average: your average blended with 3 days at the group average, "
+                 "so one lucky day can't top the board.")
+
+
 @dataclass(frozen=True)
 class Standing:
     player_name: str
-    wins: int
-    played: int
+    adjusted: float
     average: float
+    played: int
+    wins: int
 
 
 def standings(puzzles: list[list[Entry]], higher_is_better: bool) -> list[tuple[int, Standing]]:
-    """Rank players across many puzzles: most daily wins first, then best average score."""
+    """Rank players across many puzzles by adjusted average, then daily wins."""
     wins: dict[str, int] = defaultdict(int)
     scores: dict[str, list[int]] = defaultdict(list)
     names: dict[str, str] = {}
@@ -137,23 +146,38 @@ def standings(puzzles: list[list[Entry]], higher_is_better: bool) -> list[tuple[
             wins[entry.player_id] += place == 1
             scores[entry.player_id].append(entry.score)
             names[entry.player_id] = entry.player_name
+    every_score = [s for player_scores in scores.values() for s in player_scores]
+    if not every_score:
+        return []
+    group_avg = sum(every_score) / len(every_score)
 
-    rows = [Standing(names[p], wins[p], len(s), sum(s) / len(s)) for p, s in scores.items()]
+    rows = [
+        Standing(names[p], (sum(s) + PRIOR_DAYS * group_avg) / (len(s) + PRIOR_DAYS),
+                 sum(s) / len(s), len(s), wins[p])
+        for p, s in scores.items()
+    ]
     sign = -1 if higher_is_better else 1
-    rows.sort(key=lambda r: (-r.wins, sign * r.average))
+    rows.sort(key=lambda r: (sign * round(r.adjusted, 6), -r.wins))
     ranked: list[tuple[int, Standing]] = []
     for i, row in enumerate(rows):
         prev = rows[i - 1] if i else None
-        tied = prev and (prev.wins, prev.average) == (row.wins, row.average)
+        tied = prev and (round(prev.adjusted, 6), prev.wins) == (round(row.adjusted, 6), row.wins)
         ranked.append((ranked[-1][0] if tied else i + 1, row))
     return ranked
+
+
+def _fmt(game: GameInfo, value: float) -> str:
+    value /= game.scale
+    if game.scale > 1 or not game.higher_is_better:
+        return f"{value:,.2f}"
+    return f"{value:,.0f}"
 
 
 def format_standings(game: GameInfo, label: str, ranked: list[tuple[int, Standing]]) -> str:
     lines = [f"{game.emoji} {game.name} — {label}"]
     for place, row in ranked:
         marker = MEDALS.get(place, f"{place}.")
-        avg = f"{row.average:.1f}" if not game.higher_is_better else f"{row.average:.0f}"
         win_word = "win" if row.wins == 1 else "wins"
-        lines.append(f"{marker} {row.player_name} — {row.wins} {win_word} · avg {avg} · {row.played} played")
+        lines.append(f"{marker} {row.player_name} — {_fmt(game, row.adjusted)} "
+                     f"(avg {_fmt(game, row.average)} · {row.played} played · {row.wins} {win_word})")
     return "\n".join(lines)

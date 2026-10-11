@@ -73,3 +73,26 @@ def test_color_daily_with_and_without_day_line():
     assert (a.game, a.puzzle, a.puzzle_label, a.score, a.display) == (
         "color", "2026-10-07", "October 7", 4382, "43.82/50")
     assert (b.puzzle, b.score, b.display) == ("2026-10-07", 4240, "42.40/50")
+
+
+def test_adjusted_average_beats_a_lucky_day_and_breaks_ties_by_wins():
+    from gamebot.llm import GameInfo
+    from gamebot.query import format_standings, standings
+    from gamebot.store import Entry
+    e = lambda pid, s: Entry(pid, pid.title(), s, str(s))  # noqa: E731
+    # Lucky Bob plays once (900, the best single score); steady Cam plays 4 days at 850;
+    # Alice, Dan, and Eve play all 7 days at 800, 720, 720.
+    day = lambda *extra: [e("alice", 800), e("dan", 720), e("eve", 720), *extra]  # noqa: E731
+    days = [day(e("cam", 850), e("bob", 900))] + [day(e("cam", 850))] * 3 + [day()] * 3
+    ranked = {r.player_name: r for _, r in standings(days, higher_is_better=True)}
+    group_avg = (7 * 800 + 4 * 850 + 900 + 14 * 720) / 26
+    assert round(ranked["Bob"].adjusted, 2) == round((900 + 3 * group_avg) / 4, 2)
+    assert [p for p, _ in sorted(ranked.items(), key=lambda kv: -kv[1].adjusted)][:3] == ["Cam", "Bob", "Alice"]
+
+    # Same adjusted score: more daily wins ranks higher; identical everything shares a place.
+    tied = standings([[e("a", 5), e("b", 5)]], higher_is_better=False)
+    assert [p for p, _ in tied] == [1, 1]
+
+    color = GameInfo("color", "Color Daily", "🎨", True, scale=100)
+    out = format_standings(color, "All time", standings([[e("x", 4382)]], True))
+    assert out == "🎨 Color Daily — All time\n🥇 X — 43.82 (avg 43.82 · 1 played · 1 win)"

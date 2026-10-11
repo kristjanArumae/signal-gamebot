@@ -247,11 +247,13 @@ def test_lb_week_standings(setup):
     run(bot.handle_envelope(envelope("Alice", "!lb week")))
     assert messenger.sent[-1] == (
         "🎬 Framed — This week (Oct 5–Oct 7)\n"
-        "🥇 Bob — 1 win · avg 2.0 · 1 played\n"
-        "🥈 Alice — 0 wins · avg 4.0 · 1 played\n\n"
+        "🥇 Bob — 2.75 (avg 2.00 · 1 played · 1 win)\n"
+        "🥈 Alice — 3.25 (avg 4.00 · 1 played · 0 wins)\n\n"
         "🗺️ MapTap — This week (Oct 5–Oct 7)\n"
-        "🥇 Alice — 2 wins · avg 967 · 3 played\n"
-        "🥈 Bob — 1 win · avg 950 · 3 played"
+        "🥇 Alice — 962 (avg 967 · 3 played · 2 wins)\n"
+        "🥈 Bob — 954 (avg 950 · 3 played · 1 win)\n\n"
+        "📊 Ranked by adjusted average: your average blended with 3 days at the group average, "
+        "so one lucky day can't top the board."
     )
 
 

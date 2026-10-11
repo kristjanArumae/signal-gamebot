@@ -8,7 +8,10 @@ and posts leaderboards.
 - Each game's leaderboard posts as soon as every **regular** (anyone who played that game in the
   last 7 days) has submitted, otherwise at **6pm ET**. With no history yet, it waits for 6pm.
 - Exact commands only: `!lb [game] [oct 5 | yesterday | week | last week | month | last month | all]`,
-  `!help`, `!games`, `!joke`, `!usage`. Anything else starting with `!` gets ❓; a valid `!lb` with nothing to show gets 🤷.
+  `!help`, `!games`, `!joke`, `!usage`.
+- Week / month / all-time boards rank by **adjusted average**: each player's scores plus 3 imaginary
+  days at the group average (`PRIOR_DAYS` in `gamebot/query.py`). One lucky day can't top the board;
+  with many plays it's essentially your real average. Ties break on daily wins. Anything else starting with `!` gets ❓; a valid `!lb` with nothing to show gets 🤷.
 
 ## Bot account
 

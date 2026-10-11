@@ -27,6 +27,7 @@ class Game:
     emoji: str
     url: str
     higher_is_better: bool
+    scale: int = 1  # stored score / scale = real score
 
     def parse(self, text: str, today: date) -> Result | None:
         raise NotImplementedError
@@ -155,6 +156,7 @@ class ColorDaily(Game):
     emoji = "🎨"
     url = "https://dialed.gg/color"
     higher_is_better = True
+    scale = 100
 
     _header = re.compile(r"Color Daily\s*[—–-]\s*([A-Za-z]+)\.?\s+(\d{1,2})\b", re.I)
     _score = re.compile(r"^\s*(\d{1,2}(?:\.\d{1,2})?)\s*/\s*50\b", re.M)

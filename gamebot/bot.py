@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 from .games import GAMES_BY_KEY, parse_any
 from .leaderboard import format_board
 from .llm import Claude, GameInfo, looks_like_score
-from .query import LbArgError, format_standings, parse_lb_args, puzzle_days, standings
+from .query import ADJUSTED_NOTE, LbArgError, format_standings, parse_lb_args, puzzle_days, standings
 from .signal_client import rest_group_id
 from .store import PuzzleRef, Store
 
@@ -53,7 +53,7 @@ Mix them: !lb maptap month
 !usage — how much AI the bot has used
 
 ❓ = I don't know that command. 🤷 = no scores for that.
-Week/month/all-time rank by daily wins, then average score.
+Week/month/all-time rank by adjusted average (your average blended with 3 days at the group average).
 
 🛠️ Source & setup: https://github.com/kristjanArumae/signal-gamebot"""
 
@@ -243,7 +243,8 @@ class GameBot:
         return result
 
     def _all_games(self) -> list[GameInfo]:
-        builtin = [GameInfo(g.key, g.name, g.emoji, g.higher_is_better, g.url) for g in GAMES_BY_KEY.values()]
+        builtin = [GameInfo(g.key, g.name, g.emoji, g.higher_is_better, g.url, g.scale)
+                   for g in GAMES_BY_KEY.values()]
         return builtin + [g for g in self.store.learned_games() if g.key not in GAMES_BY_KEY]
 
     def _game(self, key: str) -> GameInfo:
@@ -323,6 +324,8 @@ class GameBot:
 
         if not boards:
             return "empty"
+        if query.kind == "range":
+            boards.append(ADJUSTED_NOTE)
         await self._send(group_id, "\n\n".join(boards))
         return "ok"
 
