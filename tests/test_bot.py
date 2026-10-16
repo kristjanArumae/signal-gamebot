@@ -39,13 +39,27 @@ class Clock:
         self.now += timedelta(**kw)
 
 
+def framed(n: int, guess: int) -> str:
+    squares = " ".join(["🟥"] * (guess - 1) + ["🟩"] + ["⬛"] * (6 - guess)) if guess <= 6 else " ".join(["🟥"] * 6)
+    return f"Framed #{n}\n🎥 {squares}\n\nhttps://framed.wtf"
+
+
 def maptap(day: int, score: int) -> str:
     return f"www.maptap.gg October {day}\n98🔥 99🔥 92🏆 98🔥 90👑\nFinal score: {score}"
+
+
+def episode(number: int, guesses: int) -> str:
+    squares = ["🟥"] * (guesses - 1) + ["🟩"] + ["⬛"] * (10 - guesses)
+    return f"Episode #{number}\n📺 " + " ".join(squares) + "\n\nhttps://episode.wtf"
 
 
 def envelope(who: str, text: str, ts: int = 1) -> dict:
     return {"sourceUuid": f"uuid-{who}", "sourceName": who, "timestamp": ts,
             "dataMessage": {"timestamp": ts, "message": text, "groupInfo": {"groupId": GROUP}}}
+
+
+def members(bot, *names, group=GROUP):
+    bot.store.set_members(rest_group_id(group), [f"uuid-{n}" for n in names])
 
 
 def allow(bot, group):
@@ -72,7 +86,7 @@ def test_reacts_and_ignores_chatter(setup):
     assert messenger.sent == []
 
 
-def test_no_early_post_without_history_then_cutoff_posts(setup):
+def test_no_early_post_without_member_list_then_cutoff_posts(setup):
     bot, messenger, clock, run = setup
     run(bot.handle_envelope(envelope("Alice", maptap(5, 945))))
     run(bot.handle_envelope(envelope("Bob", maptap(5, 990))))
@@ -88,27 +102,37 @@ def test_no_early_post_without_history_then_cutoff_posts(setup):
     assert messenger.sent == ["🗺️ MapTap — October 5\n🥇 Bob — 990\n🥈 Alice — 945"]
 
 
-def test_early_post_when_all_regulars_in(setup):
+def test_early_post_when_every_member_in(setup):
     bot, messenger, clock, run = setup
-    for who in ("Alice", "Bob", "Carol"):
-        run(bot.handle_envelope(envelope(who, maptap(5, 900))))
-    clock.advance(hours=9)  # Oct 5 6pm cutoff posts day one
-    run(bot.tick())
-    messenger.sent.clear()
-    clock.advance(hours=15)  # Oct 6 9am
-    run(bot.handle_envelope(envelope("Alice", maptap(6, 950))))
-    run(bot.handle_envelope(envelope("Bob", maptap(6, 950))))
+    members(bot, "Alice", "Bob", "Carol")
+    run(bot.handle_envelope(envelope("Alice", maptap(5, 950))))
+    run(bot.handle_envelope(envelope("Bob", maptap(5, 950))))
     assert messenger.sent == []
-    run(bot.handle_envelope(envelope("Carol", maptap(6, 800))))
-    early = ("🗺️ MapTap — October 6\n🥇 Alice — 950\n🥇 Bob — 950\n🥉 Carol — 800\n\n"
+    run(bot.handle_envelope(envelope("Carol", maptap(5, 800))))
+    early = ("🗺️ MapTap — October 5\n🥇 Alice — 950\n🥇 Bob — 950\n🥉 Carol — 800\n\n"
              "🔓 Everyone's played — spoilers are fair game!")
     assert messenger.sent == [early]
 
-    # Late joiner after the early post doesn't trigger another post, nor does the cutoff.
-    run(bot.handle_envelope(envelope("Dan", maptap(6, 999))))
+    # A late score after the early post doesn't trigger another post, nor does the cutoff.
+    run(bot.handle_envelope(envelope("Alice", maptap(5, 999))))
     clock.advance(hours=10)
     run(bot.tick())
     assert messenger.sent == [early]
+
+
+def test_member_who_skips_a_game_holds_it_until_cutoff(setup):
+    """Barb never plays Framed. Everyone else finishing it isn't 'everyone', so no 🔓 post."""
+    bot, messenger, clock, run = setup
+    members(bot, "Alice", "Bob", "Barb")
+    for day in (5, 6):
+        run(bot.handle_envelope(envelope("Alice", maptap(day, 900))))
+        run(bot.handle_envelope(envelope("Bob", maptap(day, 900))))
+        clock.advance(days=1)
+    clock.now -= timedelta(days=2)
+    assert messenger.sent == []
+    clock.advance(hours=9)  # 6pm cutoff
+    run(bot.tick())
+    assert messenger.sent == ["🗺️ MapTap — October 5\n🥇 Alice — 900\n🥇 Bob — 900"]
 
 
 def test_framed_lower_is_better_and_leaderboard_command(setup):
@@ -216,14 +240,10 @@ def test_direct_message_gets_a_reply():
     assert len(sent) == 1 and sent[0][0] == "uuid-Alice"
 
 
-def framed(n: int, guess: int) -> str:
-    squares = " ".join(["🟥"] * (guess - 1) + ["🟩"] + ["⬛"] * (6 - guess)) if guess <= 6 else " ".join(["🟥"] * 6)
-    return f"Framed #{n}\n🎥 {squares}\n\nhttps://framed.wtf"
-
-
 def play_week(bot, clock, run):
     """Mon Oct 5 – Wed Oct 7: Alice wins MapTap twice, Bob once; Bob wins the one Framed."""
     days = [(5, 950, 900), (6, 980, 990), (7, 970, 960)]
+    members(bot, "Alice", "Bob")
     for i, (day, alice, bob) in enumerate(days):
         run(bot.handle_envelope(envelope("Alice", maptap(day, alice))))
         run(bot.handle_envelope(envelope("Bob", maptap(day, bob))))
@@ -356,8 +376,10 @@ def test_groups_are_isolated():
         real_id: "🗺️ MapTap — October 5\n🥇 Carol — 800",
     }
 
-    # Real group's only regular is Carol, so Carol + Dan trigger the early post. If the test
-    # group's Alice and Bob leaked in, they'd count as missing regulars and block it.
+    # The real group is Carol and Dan, so they trigger the early post. If the test group's
+    # Alice and Bob leaked in, they'd count as missing and block it.
+    members(bot, "Alice", "Bob", group=test)
+    members(bot, "Carol", "Dan", group=real)
     sent.clear()
     clock.advance(hours=15)
     run(bot.handle_envelope(env("Carol", maptap(6, 990), real)))
@@ -469,13 +491,14 @@ def test_dm_replies_are_rate_limited():
 
 def test_open_board_shows_who_we_are_waiting_on(setup):
     bot, messenger, clock, run = setup
-    for who in ("Alice", "Bob", "Carol"):
-        run(bot.handle_envelope(envelope(who, maptap(5, 900))))
-    clock.advance(days=1)
-    run(bot.handle_envelope(envelope("Bob", maptap(6, 950))))
+    members(bot, "Alice", "Bob", "Carol", "Newbie")
+    for who in ("Alice", "Carol"):
+        run(bot.handle_envelope(envelope(who, framed(1670, 3))))
+    run(bot.handle_envelope(envelope("Bob", maptap(5, 950))))
     run(bot.handle_envelope(envelope("Alice", "!lb maptap")))
-    assert messenger.sent[-1] == ("🗺️ MapTap — October 6 (so far)\n🥇 Bob — 950\n"
-                                  "⏳ Waiting on: Alice, Carol")
+    # Newbie has never posted, so the bot doesn't know their name yet.
+    assert messenger.sent[-1] == ("🗺️ MapTap — October 5 (so far)\n🥇 Bob — 950\n"
+                                  "⏳ Waiting on: Alice, Carol, 1 other")
 
 
 def test_games_command(setup):
@@ -490,9 +513,10 @@ def test_games_command(setup):
         "🎮 Games\n"
         "🎨 Color Daily — https://dialed.gg/color\n"
         "🛒 Costcodle — https://costcodle.com\n"
+        "📺 Episode — https://episode.wtf\n"
         "🎬 Framed — https://framed.wtf\n"
         "🗺️ MapTap — https://maptap.gg\n"
-        "🌍 TimeGuessr — https://timeguessr.com"
+        "🌍 TimeGuessr — https://timeguessr.com/play?mode=daily"
     )  # games learned only in other groups aren't listed
 
 
@@ -550,3 +574,22 @@ def test_adds_sent_at_to_old_databases(tmp_path):
     old.close()
     store = Store(path)
     assert store.db.execute("SELECT sent_at FROM submissions").fetchone() == (None,)
+
+
+def test_episode_is_weekly(setup):
+    """Episode #215 runs Mon Oct 12 – Sun Oct 18: its board waits for Sunday's cutoff."""
+    bot, messenger, clock, run = setup
+    clock.now = datetime(2026, 10, 15, 11, 0, tzinfo=ET).astimezone(timezone.utc)  # Thursday
+    run(bot.handle_envelope(envelope("Kelsey", episode(215, 10))))
+    run(bot.handle_envelope(envelope("Joe", episode(215, 2))))
+    for _ in range(3):  # Thu, Fri, Sat cutoffs
+        clock.advance(hours=7)
+        run(bot.tick())
+        clock.advance(hours=17)
+    assert messenger.sent == []
+    run(bot.handle_envelope(envelope("Brittanie", episode(215, 9))))  # Sunday 11am
+    run(bot.handle_envelope(envelope("Joe", "!lb oct 17")))  # any day of its week finds it
+    assert messenger.sent[-1].startswith("📺 Episode — #215 (so far)\n🥇 Joe — 2/10")
+    clock.advance(hours=7)  # Sunday 6pm
+    run(bot.tick())
+    assert messenger.sent[-1] == "📺 Episode — #215\n🥇 Joe — 2/10\n🥈 Brittanie — 9/10\n🥉 Kelsey — 10/10"

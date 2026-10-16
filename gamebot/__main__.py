@@ -19,6 +19,7 @@ async def scheduler(bot: GameBot, client: SignalClient) -> None:
             for group in await client.sync_groups():
                 # Record each group's name so its data can be told apart (e.g. a test group vs the real one).
                 bot.store.upsert_group(group["id"], group.get("name") or "", bot.clock())
+                bot.store.set_members(group["id"], [m for m in group.get("members") or [] if m != client.number])
         except Exception:
             log.exception("scheduled work failed")
         await asyncio.sleep(30)

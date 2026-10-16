@@ -8,6 +8,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, tzinfo
 
+from .games import GAMES_BY_KEY
 from .leaderboard import MEDALS, rank
 from .llm import GameInfo
 from .store import Entry
@@ -100,16 +101,22 @@ def puzzle_days(puzzles: list[tuple[str, str, str, datetime]], tz: tzinfo) -> di
     Dated puzzles (MapTap's "2026-10-05") use their own date. Numbered puzzles go up by one a day,
     so each game's number→day offset is the most common (first post day − number) in the group's
     history; a few late posts don't move it. Ties go to the smaller offset, since posting late is
-    far more common than early. Anything else falls back to the day it was first posted.
+    far more common than early. Games with a known schedule (weekly Episode) say their own start
+    day. Anything else falls back to the day it was first posted.
     """
+    def known_day(game: str, puzzle: str) -> date | None:
+        return GAMES_BY_KEY[game].puzzle_day(puzzle) if game in GAMES_BY_KEY else None
+
     offsets: dict[str, Counter] = defaultdict(Counter)
     for game, puzzle, _, first in puzzles:
-        if puzzle.isdigit():
+        if puzzle.isdigit() and not known_day(game, puzzle):
             offsets[game][first.astimezone(tz).date().toordinal() - int(puzzle)] += 1
 
     days = {}
     for game, puzzle, _, first in puzzles:
-        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", puzzle):
+        if day := known_day(game, puzzle):
+            days[(game, puzzle)] = day
+        elif re.fullmatch(r"\d{4}-\d{2}-\d{2}", puzzle):
             days[(game, puzzle)] = date.fromisoformat(puzzle)
         elif puzzle.isdigit():
             offset = min(offsets[game].items(), key=lambda kv: (-kv[1], kv[0]))[0]

@@ -1,6 +1,6 @@
 from datetime import date
 
-from gamebot.games import parse_any
+from gamebot.games import Result, parse_any
 
 TODAY = date(2026, 10, 5)
 
@@ -96,3 +96,12 @@ def test_adjusted_average_beats_a_lucky_day_and_breaks_ties_by_wins():
     color = GameInfo("color", "Color Daily", "🎨", True, scale=100)
     out = format_standings(color, "All time", standings([[e("x", 4382)]], True))
     assert out == "🎨 Color Daily — All time\n🥇 X — 43.82 (avg 43.82 · 1 played · 1 win)"
+
+
+def test_episode():
+    from gamebot.games import Episode
+    text = "Episode #215\n📺 🟥 🟩 ⬛ ⬛ ⬛ ⬛ ⬛ ⬛ ⬛ ⬛\n\nhttps://episode.wtf"
+    assert parse_any(text, date(2026, 10, 15)) == Result("episode", "215", "#215", 2, "2/10")
+    failed = "Episode #215\n📺 " + " ".join(["🟥"] * 10) + "\n\nhttps://episode.wtf"
+    assert parse_any(failed, date(2026, 10, 15)).display == "X/10"
+    assert Episode().puzzle_day("215") == date(2026, 10, 12)  # a Monday

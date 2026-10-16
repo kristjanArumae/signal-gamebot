@@ -9,7 +9,7 @@ from __future__ import annotations
 import calendar
 import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 
 @dataclass(frozen=True)
@@ -28,9 +28,14 @@ class Game:
     url: str
     higher_is_better: bool
     scale: int = 1  # stored score / scale = real score
+    days_per_puzzle: int = 1  # 7 for a weekly game
 
     def parse(self, text: str, today: date) -> Result | None:
         raise NotImplementedError
+
+    def puzzle_day(self, puzzle: str) -> date | None:
+        """The day a puzzle starts, for games whose schedule is known; None to infer it from posts."""
+        return None
 
 
 _MONTHS = {
@@ -130,7 +135,7 @@ class TimeGuessr(Game):
     key = "timeguessr"
     name = "TimeGuessr"
     emoji = "🌍"
-    url = "https://timeguessr.com"
+    url = "https://timeguessr.com/play?mode=daily"
     higher_is_better = True
 
     _header = re.compile(r"TimeGuessr\s+#\s*([\d,]+)\s*[—–-]\s*([\d,]+)\s*/\s*([\d,]+)", re.I)
@@ -180,7 +185,44 @@ class ColorDaily(Game):
         )
 
 
-GAMES: list[Game] = [MapTap(), Framed(), TimeGuessr(), ColorDaily()]
+class Episode(Game):
+    """Episode #215 / 📺 🟥 🟩 ⬛ … (10 squares) — weekly, from the Framed makers. Score is guesses
+    used, 11 = failed. A new puzzle starts every Monday: #1 was 2022-09-05 (from episode.wtf's code)."""
+
+    key = "episode"
+    name = "Episode"
+    emoji = "📺"
+    url = "https://episode.wtf"
+    higher_is_better = False
+    days_per_puzzle = 7
+
+    _header = re.compile(r"^\s*Episode\s+#\s*([\d,]+)\s*$", re.M)
+    _squares = re.compile(r"[🟥🟩⬛🟨]")
+    FIRST = date(2022, 9, 5)
+    GUESSES = 10
+    FAIL = 11
+
+    def parse(self, text: str, today: date) -> Result | None:
+        header = self._header.search(text)
+        if not header:
+            return None
+        grid = next((line for line in text[header.end():].splitlines() if "📺" in line), None)
+        squares = self._squares.findall(grid or "")
+        if not squares:
+            return None
+        number = header.group(1).replace(",", "")
+        if "🟩" in squares:
+            score = squares.index("🟩") + 1
+            display = f"{score}/{self.GUESSES}"
+        else:
+            score, display = self.FAIL, f"X/{self.GUESSES}"
+        return Result(self.key, number, f"#{number}", score, display)
+
+    def puzzle_day(self, puzzle: str) -> date | None:
+        return self.FIRST + timedelta(weeks=int(puzzle) - 1) if puzzle.isdigit() else None
+
+
+GAMES: list[Game] = [MapTap(), Framed(), TimeGuessr(), ColorDaily(), Episode()]
 GAMES_BY_KEY = {g.key: g for g in GAMES}
 
 

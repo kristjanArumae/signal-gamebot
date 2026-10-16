@@ -26,19 +26,18 @@ REPEAT = "🔁"
 UNKNOWN_COMMAND = "❓"
 NOTHING_FOUND = "🤷"
 AI_BUDGET_SPENT = "⏳"
-# Someone who played a game in this window is expected to play today's puzzle too.
-REGULARS_WINDOW = timedelta(days=7)
-# At the cutoff, post any unposted puzzle that got a submission this recently...
+# At the cutoff, post any unposted puzzle that got a submission this recently (plus a weekly
+# game's week)...
 DUE_WINDOW = timedelta(hours=36)
-# ...as long as the puzzle itself is today's or yesterday's. Late posts of older puzzles are
-# tracked but never trigger a leaderboard post.
+# ...as long as the puzzle is still running or ended at most this many days ago. Late posts of
+# older puzzles are tracked but never trigger a leaderboard post.
 CURRENT_PUZZLE_DAYS = 1
 
 FOOTER = "\n\n💬 !help for commands"
 
 HELP = """🎮 Scorebot
 Paste your daily game results here. I react ✅ when a score is tracked (🤖 = read by the AI backup, 🔁 = already had yours, ⏳ = AI budget used up for now).
-Each game's board posts once everyone who's played it this week has played today (🔓 no more spoilers), or at {cutoff} ET.
+Each game's board posts once everyone in the group has played (🔓 no more spoilers), or at {cutoff} ET. Weekly games (Episode) close at {cutoff} ET on Sunday.
 
 Commands
 !lb — latest board for each game
@@ -139,7 +138,7 @@ class GameBot:
         await react(tracked if added else REPEAT)
 
         if (added and self._is_current(group_id, result.game, result.puzzle)
-                and self._everyone_in(group_id, result.game, result.puzzle, now)):
+                and self._everyone_in(group_id, result.game, result.puzzle)):
             await self.post_final(PuzzleRef(group_id, result.game, result.puzzle, result.puzzle_label),
                                   everyone_in=True)
 
@@ -162,9 +161,17 @@ class GameBot:
     def _puzzle_days(self, group_id: str) -> dict[tuple[str, str], date]:
         return puzzle_days(self.store.puzzles(group_id), self.tz)
 
+    def _last_day(self, group_id: str, game: str, puzzle: str) -> date:
+        """The final day a puzzle is open: its own day, or the Sunday ending a weekly game's week."""
+        days = GAMES_BY_KEY[game].days_per_puzzle if game in GAMES_BY_KEY else 1
+        return self._puzzle_days(group_id)[(game, puzzle)] + timedelta(days=days - 1)
+
     def _is_current(self, group_id: str, game: str, puzzle: str) -> bool:
-        day = self._puzzle_days(group_id)[(game, puzzle)]
-        return day >= self._today() - timedelta(days=CURRENT_PUZZLE_DAYS)
+        return self._last_day(group_id, game, puzzle) >= self._today() - timedelta(days=CURRENT_PUZZLE_DAYS)
+
+    def _is_due(self, group_id: str, game: str, puzzle: str) -> bool:
+        """At the cutoff, should this puzzle's board close today?"""
+        return self._is_current(group_id, game, puzzle) and self._last_day(group_id, game, puzzle) <= self._today()
 
     def _ai_status(self) -> str:
         """'ok', 'off' (no API key), or 'over_budget' (daily or monthly AI spend cap reached)."""
@@ -251,13 +258,14 @@ class GameBot:
     def _game(self, key: str) -> GameInfo:
         return next(g for g in self._all_games() if g.key == key)
 
-    def _everyone_in(self, group_id: str, game: str, puzzle: str, now: datetime) -> bool:
+    def _everyone_in(self, group_id: str, game: str, puzzle: str) -> bool:
         if self.store.is_posted(group_id, game, puzzle):
             return False
         submitted = {e.player_id for e in self.store.entries(group_id, game, puzzle)}
-        regulars = self.store.players_since(group_id, game, now - REGULARS_WINDOW, exclude_puzzle=puzzle)
-        # With no history yet we can't know who's playing, so wait for the cutoff.
-        return len(submitted) >= 2 and bool(regulars) and regulars <= submitted
+        members = self.store.members(group_id)
+        # Every member, not just past players: someone who skips a game holds it until the cutoff.
+        # No member list yet (bot just joined) means we can't tell, so wait for the cutoff.
+        return len(submitted) >= 2 and bool(members) and members <= submitted
 
     async def _send(self, group_id: str, text: str) -> None:
         await self.messenger.send(group_id, text + FOOTER)
@@ -275,12 +283,15 @@ class GameBot:
         open_board = not self.store.is_posted(group_id, game, puzzle)
         board = format_board(self._game(game), label, entries, so_far=open_board)
         if open_board and self._is_current(group_id, game, puzzle):
-            regulars = self.store.players_since(group_id, game, self.clock() - REGULARS_WINDOW,
-                                                exclude_puzzle=puzzle)
-            missing = regulars - {e.player_id for e in entries}
+            missing = self.store.members(group_id) - {e.player_id for e in entries}
             if missing:
                 names = self.store.player_names(group_id)
-                board += "\n⏳ Waiting on: " + ", ".join(sorted(names.get(p, "?") for p in missing))
+                known = sorted(names[p] for p in missing if p in names)
+                unknown = len(missing) - len(known)  # members who've never posted a score
+                if unknown:
+                    known.append(f"{unknown} other{'s' if unknown > 1 else ''}" if known else
+                                 f"{unknown} member{'s' if unknown > 1 else ''}")
+                board += "\n⏳ Waiting on: " + ", ".join(known)
         return board
 
     async def games(self, group_id: str) -> None:
@@ -310,9 +321,10 @@ class GameBot:
             for game, puzzle, label, day in sorted(puzzles, key=lambda p: p[3]):
                 latest[game] = (puzzle, label)  # by puzzle date, so a late post of an old one doesn't win
             boards = [self._daily_board(group_id, g, p, label) for g, (p, label) in sorted(latest.items())]
-        elif query.kind == "day":
+        elif query.kind == "day":  # a weekly puzzle shows on every day of its week
             boards = [self._daily_board(group_id, g, p, label)
-                      for g, p, label, day in sorted(puzzles) if day == query.start]
+                      for g, p, label, day in sorted(puzzles)
+                      if day <= query.start <= self._last_day(group_id, g, p)]
         else:
             by_game: dict[str, list] = defaultdict(list)
             for game, puzzle, _, day in puzzles:
@@ -337,7 +349,8 @@ class GameBot:
         today = local.date().isoformat()
         if local.hour < self.post_hour or self.store.get_meta("last_cutoff") == today:
             return
-        for ref in self.store.unposted_since(now - DUE_WINDOW):
-            if self._is_current(ref.group_id, ref.game, ref.puzzle):
+        longest = timedelta(days=max(g.days_per_puzzle for g in GAMES_BY_KEY.values()))
+        for ref in self.store.unposted_since(now - DUE_WINDOW - longest):
+            if self._is_due(ref.group_id, ref.game, ref.puzzle):
                 await self.post_final(ref)
         self.store.set_meta("last_cutoff", today)

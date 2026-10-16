@@ -1,12 +1,13 @@
 # signal-gamebot
 
-A Signal group bot that tracks daily-game scores (MapTap, Framed, TimeGuessr, Color Daily; others via AI)
+A Signal group bot that tracks daily-game scores (MapTap, Framed, TimeGuessr, Color Daily, weekly Episode; others via AI)
 and posts leaderboards.
 
 - Paste a result in the group → bot reacts ✅ (🤖 if the AI read it, 🔁 if you already submitted that
   puzzle; first one counts, ⏳ if the AI budget is used up). Anything that isn't a game result is ignored.
-- Each game's leaderboard posts as soon as every **regular** (anyone who played that game in the
-  last 7 days) has submitted, otherwise at **6pm ET**. With no history yet, it waits for 6pm.
+- Each game's leaderboard posts as soon as **every group member** has submitted, otherwise at
+  **6pm ET** (weekly games: 6pm ET on the Sunday ending their week). Until the bot has seen the
+  group's member list, it waits for 6pm.
 - Exact commands only: `!lb [game] [oct 5 | yesterday | week | last week | month | last month | all]`,
   `!help`, `!games`, `!joke`, `!usage`.
 - Week / month / all-time boards rank by **adjusted average**: each player's scores plus 3 imaginary

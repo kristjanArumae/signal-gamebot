@@ -38,6 +38,11 @@ CREATE TABLE IF NOT EXISTS groups (
     first_seen TEXT NOT NULL,
     allowed    INTEGER NOT NULL DEFAULT 0  -- the bot ignores groups until they're allowed
 );
+CREATE TABLE IF NOT EXISTS group_members (
+    group_id  TEXT NOT NULL,
+    member_id TEXT NOT NULL,  -- Signal account id (uuid), same as submissions.player_id
+    PRIMARY KEY (group_id, member_id)
+);
 CREATE TABLE IF NOT EXISTS games (
     key              TEXT PRIMARY KEY,
     name             TEXT NOT NULL,
@@ -117,13 +122,15 @@ class Store:
         )
         return [Entry(*row) for row in rows]
 
-    def players_since(self, group_id: str, game: str, since: datetime,
-                      exclude_puzzle: str) -> set[str]:
-        rows = self.db.execute(
-            "SELECT DISTINCT player_id FROM submissions "
-            "WHERE group_id = ? AND game = ? AND received_at >= ? AND puzzle != ?",
-            (group_id, game, since.isoformat(), exclude_puzzle),
-        )
+    def set_members(self, group_id: str, member_ids: list[str]) -> None:
+        """Replace a group's member list (everyone but the bot), as last seen from Signal."""
+        self.db.execute("DELETE FROM group_members WHERE group_id = ?", (group_id,))
+        self.db.executemany("INSERT OR IGNORE INTO group_members VALUES (?, ?)",
+                            [(group_id, m) for m in member_ids])
+        self.db.commit()
+
+    def members(self, group_id: str) -> set[str]:
+        rows = self.db.execute("SELECT member_id FROM group_members WHERE group_id = ?", (group_id,))
         return {row[0] for row in rows}
 
     def is_posted(self, group_id: str, game: str, puzzle: str) -> bool:
