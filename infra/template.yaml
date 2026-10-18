@@ -11,9 +11,12 @@ Parameters:
   MonthlyBudgetUsd:
     Type: Number
     Default: 15
-  LatestAmiId:
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+  AmiId:
+    # Pinned on purpose: a new ImageId makes CloudFormation REPLACE the instance (new empty root
+    # disk, bot offline). Resolving "latest AL2023" did exactly that on 2026-10-18. To upgrade the
+    # OS, change this deliberately and move /opt/gamebot/data over from the old volume.
+    Type: AWS::EC2::Image::Id
+    Default: ami-04048e843b318bc37  # AL2023 arm64, running since 2026-10-18
 
 Resources:
   ArtifactBucket:
@@ -71,7 +74,7 @@ Resources:
   Instance:
     Type: AWS::EC2::Instance
     Properties:
-      ImageId: !Ref LatestAmiId
+      ImageId: !Ref AmiId
       InstanceType: !Ref InstanceType
       IamInstanceProfile: !Ref InstanceProfile
       SecurityGroupIds: [!GetAtt SecurityGroup.GroupId]
