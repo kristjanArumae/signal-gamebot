@@ -13,6 +13,10 @@ and posts leaderboards.
 - Week / month / all-time boards rank by **adjusted average**: each player's scores plus 3 imaginary
   days at the group average (`PRIOR_DAYS` in `gamebot/query.py`). One lucky day can't top the board;
   with many plays it's essentially your real average. Ties break on daily wins. Anything else starting with `!` gets ❓; a valid `!lb` with nothing to show gets 🤷.
+- `!lb best` (combines with a game and period) lists the **top 3 single scores**, all time by default,
+  with the rounds or grid behind each. One person can hold several spots; ties go to the first poster.
+  Only for point games (MapTap, TimeGuessr, Color Daily, and learned higher-is-better games): Framed,
+  Episode and Plotwords would be many-way ties.
 
 ## Bot account
 

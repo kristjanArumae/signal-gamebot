@@ -112,3 +112,12 @@ def test_plotwords():
     assert parse_any(text, TODAY) == Result("plotwords", "1554", "#1554", 3, "3/10")
     assert parse_any("Plotwords #1555\nClues used: 9/9", TODAY).display == "9/9"
     assert parse_any("Plotwords #1555\nno clue line", TODAY) is None
+
+
+def test_record_details():
+    from gamebot.games import ColorDaily, MapTap, TimeGuessr
+    assert MapTap().detail(MAPTAP) == "98🔥 99🔥 92🏆 98🔥 90👑"
+    tg = "TimeGuessr #1239 — 47,801/50,000\n\n1️⃣ 🏆9,858 · 📅 1y · 🌍 7.7mi\n2️⃣ 🏆9,993 · 📅 0y · 🌍 657ft"
+    assert TimeGuessr().detail(tg) == "9,858 · 9,993"
+    color = "Color Daily — Oct 14\nDay 9\n46.75/50 🟨🟩🟩🟨🟩\nhttps://dialed.gg/color?d=1&s=46.75"
+    assert ColorDaily().detail(color) == "🟨🟩🟩🟨🟩"

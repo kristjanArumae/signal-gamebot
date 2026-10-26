@@ -293,6 +293,34 @@ def test_lb_game_and_day_filters(setup):
     assert messenger.reactions[-2:] == [("uuid-Alice", 50, "🤷"), ("uuid-Alice", 51, "❓")]
 
 
+def test_lb_best_top_single_scores(setup):
+    bot, messenger, clock, run = setup
+    play_week(bot, clock, run)
+    run(bot.handle_envelope(envelope("Alice", "!lb best")))
+    assert messenger.sent[-1] == (  # Alice holds two spots; Framed has no records
+        "🗺️ MapTap — Top scores\n"
+        "🥇 Bob — 990 · Oct 6\n   98🔥 99🔥 92🏆 98🔥 90👑\n"
+        "🥈 Alice — 980 · Oct 6\n   98🔥 99🔥 92🏆 98🔥 90👑\n"
+        "🥉 Alice — 970 · Oct 7\n   98🔥 99🔥 92🏆 98🔥 90👑"
+    )
+    run(bot.handle_envelope(envelope("Alice", "!lb best maptap oct 5")))
+    assert messenger.sent[-1].startswith("🗺️ MapTap — Top scores · October 5\n🥇 Alice — 950 · Oct 5")
+    sent_before = len(messenger.sent)
+    run(bot.handle_envelope(envelope("Alice", "!lb framed best", ts=60)))
+    run(bot.handle_envelope(envelope("Alice", "!lb best best", ts=61)))
+    assert len(messenger.sent) == sent_before
+    assert messenger.reactions[-2:] == [("uuid-Alice", 60, "🤷"), ("uuid-Alice", 61, "❓")]
+
+
+def test_lb_best_ties_go_to_the_first_poster(setup):
+    bot, messenger, _, run = setup
+    for who in ("Alice", "Bob", "Carol", "Dan"):
+        run(bot.handle_envelope(envelope(who, maptap(5, 900))))
+    run(bot.handle_envelope(envelope("Alice", "!lb maptap best")))
+    assert [line.split(" ·")[0] for line in messenger.sent[-1].split("\n")[1::2]] == [
+        "🥇 Alice — 900", "🥇 Bob — 900", "🥇 Carol — 900"]
+
+
 def test_only_exact_commands(setup):
     bot, messenger, clock, run = setup
     play_week(bot, clock, run)

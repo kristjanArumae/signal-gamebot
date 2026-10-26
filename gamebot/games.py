@@ -29,6 +29,7 @@ class Game:
     higher_is_better: bool
     scale: int = 1  # stored score / scale = real score
     days_per_puzzle: int = 1  # 7 for a weekly game
+    records: bool = True  # !lb best: off for few-guess games, where the top score is a many-way tie
 
     def parse(self, text: str, today: date) -> Result | None:
         raise NotImplementedError
@@ -36,6 +37,10 @@ class Game:
     def puzzle_day(self, puzzle: str) -> date | None:
         """The day a puzzle starts, for games whose schedule is known; None to infer it from posts."""
         return None
+
+    def detail(self, raw: str) -> str:
+        """The play behind a score (rounds, grid) from the original share, for !lb best."""
+        return ""
 
 
 _MONTHS = {
@@ -89,6 +94,11 @@ class MapTap(Game):
         )
 
 
+    def detail(self, raw: str) -> str:
+        header, final = self._header.search(raw), self._final.search(raw)
+        return " ".join(raw[header.end():final.start()].split()) if header and final else ""
+
+
 class Framed(Game):
     """Framed #1234 / 🎥 🟥 🟥 🟩 ⬛ ⬛ ⬛ — score is guesses used, 7 = failed."""
 
@@ -97,6 +107,7 @@ class Framed(Game):
     emoji = "🎬"
     url = "https://framed.wtf"
     higher_is_better = False
+    records = False
 
     _header = re.compile(r"^\s*Framed\s+#\s*([\d,]+)\s*$", re.M)
     _squares = re.compile(r"[🟥🟩⬛🟨]")
@@ -148,6 +159,9 @@ class TimeGuessr(Game):
         score = int(m.group(2).replace(",", ""))
         return Result(self.key, number, f"#{number}", score, f"{m.group(2)}/{m.group(3)}")
 
+    def detail(self, raw: str) -> str:
+        return " · ".join(re.findall(r"🏆\s*([\d,]+)", raw))  # each round's points
+
 
 class ColorDaily(Game):
     """Color Daily — Oct 7 / [Day 2] / 43.82/50 🟨🟨🟨🟧🟩 (dialed.gg).
@@ -184,6 +198,11 @@ class ColorDaily(Game):
             display=f"{float(value):.2f}/50",
         )
 
+    def detail(self, raw: str) -> str:
+        score = self._score.search(raw)
+        line = raw[score.end():].split("\n", 1)[0] if score else ""
+        return "".join(re.findall(r"[🟥🟧🟨🟩🟦🟪⬛⬜]", line))
+
 
 class Episode(Game):
     """Episode #215 / 📺 🟥 🟩 ⬛ … (10 squares) — weekly, from the Framed makers. Score is guesses
@@ -195,6 +214,7 @@ class Episode(Game):
     url = "https://episode.wtf"
     higher_is_better = False
     days_per_puzzle = 7
+    records = False
 
     _header = re.compile(r"^\s*Episode\s+#\s*([\d,]+)\s*$", re.M)
     _squares = re.compile(r"[🟥🟩⬛🟨]")
@@ -230,6 +250,7 @@ class Plotwords(Game):
     emoji = "📝"
     url = "https://plotwords.com/daily"
     higher_is_better = False
+    records = False
 
     _header = re.compile(r"^\s*Plotwords\s+#\s*([\d,]+)\s*$", re.M | re.I)
     _clues = re.compile(r"Clues used:\s*(\d+)\s*/\s*(\d+)", re.I)

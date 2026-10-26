@@ -38,6 +38,7 @@ class GameInfo:
     higher_is_better: bool
     url: str = ""
     scale: int = 1  # scores are stored as integers; Color Daily keeps hundredths (4382 = 43.82)
+    records: bool = True  # shown by !lb best
 
 
 def _clean_url(url: str) -> str:

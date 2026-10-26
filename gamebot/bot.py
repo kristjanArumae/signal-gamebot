@@ -12,9 +12,9 @@ from typing import Protocol
 from zoneinfo import ZoneInfo
 
 from .games import GAMES_BY_KEY, parse_any
-from .leaderboard import format_board
+from .leaderboard import format_board, format_top_scores, top_plays
 from .llm import Claude, GameInfo, looks_like_score
-from .query import ADJUSTED_NOTE, LbArgError, format_standings, parse_lb_args, puzzle_days, standings
+from .query import ADJUSTED_NOTE, LbArgError, LbQuery, format_standings, parse_lb_args, puzzle_days, standings
 from .signal_client import rest_group_id
 from .store import PuzzleRef, Store
 
@@ -47,6 +47,7 @@ Commands
 !lb month — this month
 !lb all — all time
 Mix them: !lb maptap month
+!lb best — top 3 single scores ever (also: !lb maptap best, !lb best month)
 !games — the games and their links
 !joke — a dad joke
 !usage — how much AI the bot has used
@@ -251,7 +252,7 @@ class GameBot:
         return result
 
     def _all_games(self) -> list[GameInfo]:
-        builtin = [GameInfo(g.key, g.name, g.emoji, g.higher_is_better, g.url, g.scale)
+        builtin = [GameInfo(g.key, g.name, g.emoji, g.higher_is_better, g.url, g.scale, g.records)
                    for g in GAMES_BY_KEY.values()]
         return builtin + [g for g in self.store.learned_games() if g.key not in GAMES_BY_KEY]
 
@@ -316,7 +317,9 @@ class GameBot:
                    for game, puzzle, label, _ in self.store.puzzles(group_id)
                    if not wanted or game in wanted]
 
-        if query.kind == "latest":
+        if query.best:
+            boards = self._top_scores(group_id, query, days)
+        elif query.kind == "latest":
             latest = {}
             for game, puzzle, label, day in sorted(puzzles, key=lambda p: p[3]):
                 latest[game] = (puzzle, label)  # by puzzle date, so a late post of an old one doesn't win
@@ -337,10 +340,29 @@ class GameBot:
 
         if not boards:
             return "empty"
-        if query.kind == "range":
+        if query.kind == "range" and not query.best:
             boards.append(ADJUSTED_NOTE)
         await self._send(group_id, "\n\n".join(boards))
         return "ok"
+
+    def _top_scores(self, group_id: str, query: LbQuery, days: dict[tuple[str, str], date]) -> list[str]:
+        """!lb best: each records game's top single scores among puzzles in the query's period."""
+        wanted = {g.key for g in query.games}
+        boards = []
+        for game in sorted(self._all_games(), key=lambda g: g.key):
+            if not game.records or (wanted and game.key not in wanted):
+                continue
+            plays = [p for p in self.store.plays(group_id, game.key)
+                     if query.start <= days[(game.key, p.puzzle)] <= query.end]
+            if not plays:
+                continue
+            parser = GAMES_BY_KEY.get(game.key)
+            rows = []
+            for place, play in top_plays(plays, game.higher_is_better):
+                day = days[(game.key, play.puzzle)]
+                rows.append((place, play, f"{day:%b} {day.day}", parser.detail(play.raw) if parser else ""))
+            boards.append(format_top_scores(game, query.label, rows))
+        return boards
 
     async def tick(self) -> None:
         """Called periodically; posts every pending leaderboard once per day at the cutoff."""

@@ -5,7 +5,7 @@ from __future__ import annotations
 import calendar
 import re
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, tzinfo
 
 from .games import GAMES_BY_KEY
@@ -28,6 +28,7 @@ class LbQuery:
     start: date | None = None
     end: date | None = None  # inclusive
     label: str = ""
+    best: bool = False  # top single scores instead of standings
 
 
 class LbArgError(ValueError):
@@ -61,7 +62,19 @@ def _parse_date(text: str, today: date) -> date | None:
 
 
 def parse_lb_args(args: str, today: date, games: list[GameInfo]) -> LbQuery:
+    """Standings by default; with "best" anywhere (!lb maptap best month), top single scores,
+    all time unless a period is given."""
     words = args.lower().split()
+    best = "best" in words
+    if best:
+        words.remove("best")
+    query = _parse_standings_args(words, today, games)
+    if best and query.kind == "latest":
+        return replace(query, kind="range", start=date.min, end=today, label="All time", best=True)
+    return replace(query, best=best)
+
+
+def _parse_standings_args(words: list[str], today: date, games: list[GameInfo]) -> LbQuery:
     picked: list[GameInfo] = []
     rest: list[str] = []
     for word in words:

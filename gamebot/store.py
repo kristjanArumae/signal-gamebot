@@ -73,6 +73,15 @@ class Entry:
 
 
 @dataclass(frozen=True)
+class Play:
+    puzzle: str
+    player_name: str
+    score: int
+    display: str
+    raw: str
+
+
+@dataclass(frozen=True)
 class PuzzleRef:
     group_id: str
     game: str
@@ -121,6 +130,15 @@ class Store:
             (group_id, game, puzzle),
         )
         return [Entry(*row) for row in rows]
+
+    def plays(self, group_id: str, game: str) -> list[Play]:
+        """Every score posted for a game in a group, oldest first."""
+        rows = self.db.execute(
+            "SELECT puzzle, player_name, score, display, raw FROM submissions "
+            "WHERE group_id = ? AND game = ? ORDER BY received_at",
+            (group_id, game),
+        )
+        return [Play(*row) for row in rows]
 
     def set_members(self, group_id: str, member_ids: list[str]) -> None:
         """Replace a group's member list (everyone but the bot), as last seen from Signal."""
@@ -196,8 +214,9 @@ class Store:
         return {row[0] for row in rows}
 
     def learned_games(self) -> list[GameInfo]:
+        """Learned games get records only if higher is better: lower-is-better ones are usually guess counts."""
         rows = self.db.execute("SELECT key, name, emoji, higher_is_better, url FROM games ORDER BY key")
-        return [GameInfo(k, n, e, bool(h), url) for k, n, e, h, url in rows]
+        return [GameInfo(k, n, e, bool(h), url, records=bool(h)) for k, n, e, h, url in rows]
 
     def learn_game(self, game: GameInfo) -> GameInfo:
         """Save a game the first time it's seen; afterwards the saved definition wins."""
