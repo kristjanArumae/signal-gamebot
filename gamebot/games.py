@@ -222,7 +222,29 @@ class Episode(Game):
         return self.FIRST + timedelta(weeks=int(puzzle) - 1) if puzzle.isdigit() else None
 
 
-GAMES: list[Game] = [MapTap(), Framed(), TimeGuessr(), ColorDaily(), Episode()]
+class Plotwords(Game):
+    """Plotwords #1554 / Clues used: 3/10 — fewer clues is better. The clue count varies by puzzle."""
+
+    key = "plotwords"
+    name = "Plotwords"
+    emoji = "📝"
+    url = "https://plotwords.com/daily"
+    higher_is_better = False
+
+    _header = re.compile(r"^\s*Plotwords\s+#\s*([\d,]+)\s*$", re.M | re.I)
+    _clues = re.compile(r"Clues used:\s*(\d+)\s*/\s*(\d+)", re.I)
+
+    def parse(self, text: str, today: date) -> Result | None:
+        header = self._header.search(text)
+        clues = header and self._clues.search(text, header.end())
+        if not clues:
+            return None
+        number = header.group(1).replace(",", "")
+        used, total = clues.groups()
+        return Result(self.key, number, f"#{number}", int(used), f"{used}/{total}")
+
+
+GAMES: list[Game] = [MapTap(), Framed(), TimeGuessr(), ColorDaily(), Episode(), Plotwords()]
 GAMES_BY_KEY = {g.key: g for g in GAMES}
 
 

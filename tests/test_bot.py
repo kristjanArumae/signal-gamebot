@@ -516,6 +516,7 @@ def test_games_command(setup):
         "📺 Episode — https://episode.wtf\n"
         "🎬 Framed — https://framed.wtf\n"
         "🗺️ MapTap — https://maptap.gg\n"
+        "📝 Plotwords — https://plotwords.com/daily\n"
         "🌍 TimeGuessr — https://timeguessr.com/play?mode=daily"
     )  # games learned only in other groups aren't listed
 

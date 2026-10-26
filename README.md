@@ -1,6 +1,6 @@
 # signal-gamebot
 
-A Signal group bot that tracks daily-game scores (MapTap, Framed, TimeGuessr, Color Daily, weekly Episode; others via AI)
+A Signal group bot that tracks daily-game scores (MapTap, Framed, TimeGuessr, Color Daily, Plotwords, weekly Episode; others via AI)
 and posts leaderboards.
 
 - Paste a result in the group → bot reacts ✅ (🤖 if the AI read it, 🔁 if you already submitted that

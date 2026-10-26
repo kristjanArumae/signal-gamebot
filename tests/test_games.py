@@ -105,3 +105,10 @@ def test_episode():
     failed = "Episode #215\n📺 " + " ".join(["🟥"] * 10) + "\n\nhttps://episode.wtf"
     assert parse_any(failed, date(2026, 10, 15)).display == "X/10"
     assert Episode().puzzle_day("215") == date(2026, 10, 12)  # a Monday
+
+
+def test_plotwords():
+    text = "Plotwords #1554\nClues used: 3/10\n\nhttps://plotwords.com/daily"
+    assert parse_any(text, TODAY) == Result("plotwords", "1554", "#1554", 3, "3/10")
+    assert parse_any("Plotwords #1555\nClues used: 9/9", TODAY).display == "9/9"
+    assert parse_any("Plotwords #1555\nno clue line", TODAY) is None
